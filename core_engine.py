@@ -1,6 +1,6 @@
 # ═══════════════════════════════════════════════════════════════════
 # TURTLE AUTO FISHING - CORE SYSTEM
-# Version: 6.5.1
+# Version: 6.5.2 - FIXED DOUBLE PRESS
 # Author: FSERVICE808
 # ═══════════════════════════════════════════════════════════════════
 
@@ -20,13 +20,17 @@ from ctypes import wintypes
 import os
 from collections import deque
 
+# Global lock để tránh double execution
+_execution_lock = threading.Lock()
+_is_executing = False
+
 class UltraReliableInputManager:
     """Ultra-reliable input manager với multiple redundant methods"""
     
     def __init__(self):
-        # Timing tối ưu để tránh miss
-        self.e_key_cooldown = 0.06
-        self.number_key_cooldown = 0.12
+        # Timing tối ưu để tránh miss - TĂNG COOLDOWN ĐỂ TRÁNH DOUBLE PRESS
+        self.e_key_cooldown = 0.25  # Tăng từ 0.06 lên 0.25
+        self.number_key_cooldown = 0.5  # Tăng từ 0.12 lên 0.5
         
         self.last_e_time = 0
         self.last_number_time = 0
@@ -39,6 +43,9 @@ class UltraReliableInputManager:
             'e_key': {'sendinput': 0, 'pyautogui': 0, 'keyboard': 0, 'win32': 0},
             'number': {'sendinput': 0, 'pyautogui': 0, 'keyboard': 0, 'win32': 0, 'postmsg': 0}
         }
+        
+        # Lock để tránh concurrent access
+        self.input_lock = threading.Lock()
     
     def setup_input_structures(self):
         """Pre-compile input structures"""
@@ -75,145 +82,76 @@ class UltraReliableInputManager:
             self.number_inputs[num] = (INPUT * 2)(key_down, key_up)
     
     def ultra_reliable_e_press(self):
-        """Ultra-reliable E key press với multiple methods"""
-        current_time = time.perf_counter()
-        if current_time - self.last_e_time < self.e_key_cooldown:
-            return False
-        
-        self.last_e_time = current_time
-        success_count = 0
-        
-        # Method 1: SendInput (fastest)
-        try:
-            result = ctypes.windll.user32.SendInput(2, self.e_inputs, ctypes.sizeof(self.INPUT))
-            if result == 2:
-                success_count += 1
-                self.method_stats['e_key']['sendinput'] += 1
-        except:
-            pass
-        
-        time.sleep(0.01)
-        
-        # Method 2: PyAutoGUI
-        try:
-            pyautogui.press('e')
-            success_count += 1
-            self.method_stats['e_key']['pyautogui'] += 1
-        except:
-            pass
-        
-        time.sleep(0.01)
-        
-        # Method 3: Keyboard library
-        try:
-            keyboard.press_and_release('e')
-            success_count += 1
-            self.method_stats['e_key']['keyboard'] += 1
-        except:
-            pass
-        
-        time.sleep(0.01)
-        
-        # Method 4: Win32 keybd_event
-        try:
-            VK_E = 0x45
-            scan_code = win32api.MapVirtualKey(VK_E, 0)
-            win32api.keybd_event(VK_E, scan_code, 0, 0)
-            time.sleep(0.02)
-            win32api.keybd_event(VK_E, scan_code, win32con.KEYEVENTF_KEYUP, 0)
-            success_count += 1
-            self.method_stats['e_key']['win32'] += 1
-        except:
-            pass
-        
-        return success_count > 0
-    
-    def ultra_reliable_number_press(self, number, game_window=None):
-        """Ultra-reliable number press với all available methods"""
-        current_time = time.perf_counter()
-        if current_time - self.last_number_time < self.number_key_cooldown:
-            return False
-        
-        self.last_number_time = current_time
-        success_count = 0
-        number_str = str(number)
-        
-        # Method 1: SendInput
-        try:
-            if number in self.number_inputs:
-                result = ctypes.windll.user32.SendInput(2, self.number_inputs[number], ctypes.sizeof(self.INPUT))
+        """Ultra-reliable E key press với multiple methods - FIXED DOUBLE PRESS"""
+        with self.input_lock:  # Lock để tránh concurrent access
+            current_time = time.perf_counter()
+            if current_time - self.last_e_time < self.e_key_cooldown:
+                return False
+            
+            self.last_e_time = current_time
+            success_count = 0
+            
+            # CHỈ SỬ DỤNG 1 METHOD DUY NHẤT ĐỂ TRÁNH DOUBLE PRESS
+            # Method 1: SendInput (fastest và reliable nhất)
+            try:
+                result = ctypes.windll.user32.SendInput(2, self.e_inputs, ctypes.sizeof(self.INPUT))
                 if result == 2:
                     success_count += 1
-                    self.method_stats['number']['sendinput'] += 1
-        except:
-            pass
-        
-        time.sleep(0.015)
-        
-        # Method 2: PyAutoGUI
-        try:
-            pyautogui.press(number_str)
-            success_count += 1
-            self.method_stats['number']['pyautogui'] += 1
-        except:
-            pass
-        
-        time.sleep(0.015)
-        
-        # Method 3: Keyboard library
-        try:
-            keyboard.press_and_release(number_str)
-            success_count += 1
-            self.method_stats['number']['keyboard'] += 1
-        except:
-            pass
-        
-        time.sleep(0.015)
-        
-        # Method 4: Win32 keybd_event
-        try:
-            VK_CODES = {1: 0x31, 2: 0x32, 3: 0x33, 4: 0x34, 5: 0x35}
-            if number in VK_CODES:
-                vk_code = VK_CODES[number]
-                scan_code = win32api.MapVirtualKey(vk_code, 0)
-                
-                for _ in range(2):
-                    win32api.keybd_event(vk_code, scan_code, 0, 0)
-                    time.sleep(0.03)
-                    win32api.keybd_event(vk_code, scan_code, win32con.KEYEVENTF_KEYUP, 0)
-                    time.sleep(0.02)
-                
-                success_count += 1
-                self.method_stats['number']['win32'] += 1
-        except:
-            pass
-        
-        time.sleep(0.015)
-        
-        # Method 5: PostMessage (if game window available)
-        if game_window:
-            try:
-                VK_CODES = {1: 0x31, 2: 0x32, 3: 0x33, 4: 0x34, 5: 0x35}
-                if number in VK_CODES:
-                    vk_code = VK_CODES[number]
-                    scan_code = win32api.MapVirtualKey(vk_code, 0)
-                    lparam = (scan_code << 16) | 1
-                    
-                    for _ in range(2):
-                        win32gui.PostMessage(game_window, win32con.WM_KEYDOWN, vk_code, lparam)
-                        time.sleep(0.02)
-                        win32gui.PostMessage(game_window, win32con.WM_CHAR, ord(number_str), lparam)
-                        time.sleep(0.02)
-                        lparam_up = lparam | (1 << 30) | (1 << 31)
-                        win32gui.PostMessage(game_window, win32con.WM_KEYUP, vk_code, lparam_up)
-                        time.sleep(0.02)
-                    
-                    success_count += 1
-                    self.method_stats['number']['postmsg'] += 1
+                    self.method_stats['e_key']['sendinput'] += 1
+                    return True  # Return ngay khi thành công
             except:
                 pass
-        
-        return success_count > 0
+            
+            # Fallback methods chỉ khi SendInput fail
+            time.sleep(0.05)
+            
+            # Method 2: PyAutoGUI (fallback)
+            try:
+                pyautogui.press('e')
+                success_count += 1
+                self.method_stats['e_key']['pyautogui'] += 1
+                return True
+            except:
+                pass
+            
+            return success_count > 0
+    
+    def ultra_reliable_number_press(self, number, game_window=None):
+        """Ultra-reliable number press - FIXED DOUBLE PRESS"""
+        with self.input_lock:  # Lock để tránh concurrent access
+            current_time = time.perf_counter()
+            if current_time - self.last_number_time < self.number_key_cooldown:
+                return False
+            
+            self.last_number_time = current_time
+            success_count = 0
+            number_str = str(number)
+            
+            # CHỈ SỬ DỤNG 1 METHOD DUY NHẤT
+            # Method 1: SendInput
+            try:
+                if number in self.number_inputs:
+                    result = ctypes.windll.user32.SendInput(2, self.number_inputs[number], ctypes.sizeof(self.INPUT))
+                    if result == 2:
+                        success_count += 1
+                        self.method_stats['number']['sendinput'] += 1
+                        return True
+            except:
+                pass
+            
+            # Fallback
+            time.sleep(0.1)
+            
+            # Method 2: PyAutoGUI
+            try:
+                pyautogui.press(number_str)
+                success_count += 1
+                self.method_stats['number']['pyautogui'] += 1
+                return True
+            except:
+                pass
+            
+            return success_count > 0
 
 class EnhancedVisionProcessor:
     """Enhanced vision processor với improved detection"""
@@ -437,121 +375,152 @@ def log_message(message):
         pass
 
 def main_detection_loop():
-    """Main detection loop với zero-lag focus"""
-    # Initialize components
-    input_manager = UltraReliableInputManager()
-    vision_processor = EnhancedVisionProcessor()
-    game_window = find_game_window()
+    """Main detection loop với zero-lag focus - FIXED DOUBLE EXECUTION"""
+    global _execution_lock, _is_executing
     
-    # Get settings from context
-    bot = bot_instance
+    # Check if already executing
+    with _execution_lock:
+        if _is_executing:
+            log_message("⚠️ Detection loop already running! Skipping...")
+            return
+        _is_executing = True
     
-    # Settings
-    target_fps = 32
-    frame_interval = 1.0 / target_fps
-    last_minigame_time = time.time()
-    rod_timeout = 4.8
-    
-    # Statistics
-    stats = {
-        'frames_processed': 0,
-        'fish_caught': 0,
-        'e_attempts': 0,
-        'rod_deploys': 0,
-        'predictions_used': 0,
-        'immediate_hits': 0,
-        'start_time': time.time()
-    }
-    
-    collision_confirmed = False
-    consecutive_misses = 0
-    
-    log_message(f"🚀 Zero-Lag Detection Started (Target: {target_fps} FPS)")
-    
-    while bot.is_running:
-        loop_start = time.perf_counter()
+    try:
+        # Initialize components
+        input_manager = UltraReliableInputManager()
+        vision_processor = EnhancedVisionProcessor()
+        game_window = find_game_window()
         
-        try:
-            # Capture frame
-            frame = vision_processor.capture_screen_fast()
-            if frame is None:
-                time.sleep(0.001)
-                continue
+        # Get settings from context
+        bot = bot_instance
+        
+        # Settings
+        target_fps = 30  # Giảm xuống để ổn định hơn
+        frame_interval = 1.0 / target_fps
+        last_minigame_time = time.time()
+        rod_timeout = 5.0  # Tăng timeout
+        
+        # Statistics
+        stats = {
+            'frames_processed': 0,
+            'fish_caught': 0,
+            'e_attempts': 0,
+            'rod_deploys': 0,
+            'predictions_used': 0,
+            'immediate_hits': 0,
+            'start_time': time.time()
+        }
+        
+        collision_confirmed = False
+        consecutive_misses = 0
+        last_action_time = 0  # Track last action để tránh spam
+        
+        log_message(f"🚀 Zero-Lag Detection Started (Target: {target_fps} FPS)")
+        
+        while bot.is_running:
+            loop_start = time.perf_counter()
+            current_time = time.time()
             
-            stats['frames_processed'] += 1
-            
-            # Detect elements
-            red_data = vision_processor.detect_red_progress_enhanced(frame)
-            green_data = vision_processor.detect_green_zone_enhanced(frame)
-            
-            minigame_active = bool(red_data and green_data)
-            
-            if minigame_active:
-                last_minigame_time = time.time()
-                consecutive_misses = 0
+            try:
+                # Capture frame
+                frame = vision_processor.capture_screen_fast()
+                if frame is None:
+                    time.sleep(0.01)
+                    continue
                 
-                # Try predictive collision first
-                should_predict, delay = vision_processor.predict_collision_enhanced(red_data, green_data)
+                stats['frames_processed'] += 1
                 
-                if should_predict and not collision_confirmed:
-                    stats['predictions_used'] += 1
+                # Detect elements
+                red_data = vision_processor.detect_red_progress_enhanced(frame)
+                green_data = vision_processor.detect_green_zone_enhanced(frame)
+                
+                minigame_active = bool(red_data and green_data)
+                
+                if minigame_active:
+                    last_minigame_time = current_time
+                    consecutive_misses = 0
                     
-                    # Apply optimal delay
-                    if delay > 0:
-                        time.sleep(min(delay, 0.05))
+                    # Tránh action quá nhanh
+                    if current_time - last_action_time < 0.5:
+                        time.sleep(0.01)
+                        continue
                     
-                    # Execute ultra-reliable E-key press
-                    if input_manager.ultra_reliable_e_press():
-                        stats['e_attempts'] += 1
-                        stats['fish_caught'] += 1
-                        log_message("⚡ *** FISH CAUGHT - PREDICTIVE AI ***")
-                        collision_confirmed = True
+                    # Try predictive collision first
+                    should_predict, delay = vision_processor.predict_collision_enhanced(red_data, green_data)
+                    
+                    if should_predict and not collision_confirmed:
+                        stats['predictions_used'] += 1
                         
-                        # Clear buffers
+                        # Apply optimal delay
+                        if delay > 0:
+                            time.sleep(min(delay, 0.1))
+                        
+                        # Execute ultra-reliable E-key press
+                        if input_manager.ultra_reliable_e_press():
+                            stats['e_attempts'] += 1
+                            stats['fish_caught'] += 1
+                            log_message("⚡ *** FISH CAUGHT - PREDICTIVE AI ***")
+                            collision_confirmed = True
+                            last_action_time = current_time
+                            
+                            # Clear buffers
+                            vision_processor.position_buffer.clear()
+                            vision_processor.velocity_buffer.clear()
+                            
+                            time.sleep(1.0)  # Longer pause
+                            continue
+                    
+                    # Fallback to immediate collision
+                    elif vision_processor.check_immediate_collision_enhanced(red_data, green_data) and not collision_confirmed:
+                        if input_manager.ultra_reliable_e_press():
+                            stats['e_attempts'] += 1
+                            stats['fish_caught'] += 1
+                            stats['immediate_hits'] += 1
+                            log_message("⚡ *** FISH CAUGHT - IMMEDIATE DETECTION ***")
+                            collision_confirmed = True
+                            last_action_time = current_time
+                            time.sleep(1.0)  # Longer pause
+                else:
+                    # Reset collision state
+                    collision_confirmed = False
+                    consecutive_misses += 1
+                    
+                    # Clear buffers if no minigame for a while
+                    if consecutive_misses > 50:
                         vision_processor.position_buffer.clear()
                         vision_processor.velocity_buffer.clear()
+                        consecutive_misses = 0
+                    
+                    # Check rod deployment
+                    time_since_minigame = current_time - last_minigame_time
+                    time_since_action = current_time - last_action_time
+                    
+                    if (time_since_minigame >= rod_timeout and 
+                        time_since_action >= 2.0 and  # Tránh rod spam
+                        bot.auto_rod_enabled):
                         
-                        time.sleep(0.35)
-                        continue
+                        if input_manager.ultra_reliable_number_press(bot.selected_rod_key, game_window):
+                            stats['rod_deploys'] += 1
+                            log_message(f"🎣 *** ROD DEPLOYED (Key {bot.selected_rod_key}) - ULTRA-RELIABLE ***")
+                            last_minigame_time = current_time
+                            last_action_time = current_time
                 
-                # Fallback to immediate collision
-                elif vision_processor.check_immediate_collision_enhanced(red_data, green_data) and not collision_confirmed:
-                    if input_manager.ultra_reliable_e_press():
-                        stats['e_attempts'] += 1
-                        stats['fish_caught'] += 1
-                        stats['immediate_hits'] += 1
-                        log_message("⚡ *** FISH CAUGHT - IMMEDIATE DETECTION ***")
-                        collision_confirmed = True
-                        time.sleep(0.3)
-            else:
-                # Reset collision state
-                collision_confirmed = False
-                consecutive_misses += 1
+                # Frame rate control
+                elapsed = time.perf_counter() - loop_start
+                sleep_time = max(0, frame_interval - elapsed)
                 
-                # Clear buffers if no minigame for a while
-                if consecutive_misses > 30:
-                    vision_processor.position_buffer.clear()
-                    vision_processor.velocity_buffer.clear()
-                    consecutive_misses = 0
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
                 
-                # Check rod deployment
-                time_since_minigame = time.time() - last_minigame_time
-                if time_since_minigame >= rod_timeout and bot.auto_rod_enabled:
-                    if input_manager.ultra_reliable_number_press(bot.selected_rod_key, game_window):
-                        stats['rod_deploys'] += 1
-                        log_message(f"🎣 *** ROD DEPLOYED (Key {bot.selected_rod_key}) - ULTRA-RELIABLE ***")
-                        last_minigame_time = time.time()
-            
-            # Frame rate control
-            elapsed = time.perf_counter() - loop_start
-            sleep_time = max(0, frame_interval - elapsed)
-            
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-            
-        except Exception as e:
-            log_message(f"Detection loop error: {e}")
-            time.sleep(0.01)
+            except Exception as e:
+                log_message(f"Detection loop error: {e}")
+                time.sleep(0.1)
+    
+    finally:
+        # Reset execution flag
+        with _execution_lock:
+            _is_executing = False
+        log_message("🛑 Detection loop stopped")
 
 # Execute main loop
 main_detection_loop()
