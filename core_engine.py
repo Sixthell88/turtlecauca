@@ -1,4 +1,4 @@
-# core_engine.py - File này sẽ được upload lên GitHub Raw
+
 import cv2
 import numpy as np
 import time
@@ -6,7 +6,6 @@ from collections import deque
 
 class VisionEngine:
     def __init__(self):
-        # Core detection algorithms
         self.red_lower = np.array([240, 200, 180], dtype=np.uint8)
         self.red_upper = np.array([255, 220, 200], dtype=np.uint8)
         self.green_lower = np.array([65, 20, 20], dtype=np.uint8)
@@ -165,3 +164,4 @@ class InputOptimizer:
         elif prediction_time > 0.1:
             return base_offset * 1.2
         return base_offset
+
