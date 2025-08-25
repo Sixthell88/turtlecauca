@@ -1,16 +1,225 @@
-# core_engine.py - Core algorithms for fishing bot
-# This file will be loaded remotely by the main application
+# ═══════════════════════════════════════════════════════════════════
+# TURTLE AUTO FISHING - CORE SYSTEM
+# Version: 6.5.1
+# Author: FSERVICE808
+# ═══════════════════════════════════════════════════════════════════
 
 import cv2
 import numpy as np
+import pyautogui
 import time
+from PIL import ImageGrab, Image, ImageTk
+import threading
+import keyboard
+from datetime import datetime
+import win32api
+import win32con
+import win32gui
+import ctypes
+from ctypes import wintypes
+import os
 from collections import deque
 
-class VisionEngine:
-    """Core vision processing engine"""
+class UltraReliableInputManager:
+    """Ultra-reliable input manager với multiple redundant methods"""
     
     def __init__(self):
-        # Detection parameters
+        # Timing tối ưu để tránh miss
+        self.e_key_cooldown = 0.06
+        self.number_key_cooldown = 0.12
+        
+        self.last_e_time = 0
+        self.last_number_time = 0
+        
+        # Pre-compile structures
+        self.setup_input_structures()
+        
+        # Success tracking
+        self.method_stats = {
+            'e_key': {'sendinput': 0, 'pyautogui': 0, 'keyboard': 0, 'win32': 0},
+            'number': {'sendinput': 0, 'pyautogui': 0, 'keyboard': 0, 'win32': 0, 'postmsg': 0}
+        }
+    
+    def setup_input_structures(self):
+        """Pre-compile input structures"""
+        class KEYBDINPUT(ctypes.Structure):
+            _fields_ = [
+                ("wVk", ctypes.c_ushort),
+                ("wScan", ctypes.c_ushort),
+                ("dwFlags", ctypes.c_ulong),
+                ("time", ctypes.c_ulong),
+                ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong))
+            ]
+        
+        class INPUT(ctypes.Structure):
+            class _INPUT(ctypes.Union):
+                _fields_ = [("ki", KEYBDINPUT)]
+            _anonymous_ = ("_input",)
+            _fields_ = [("type", ctypes.c_ulong), ("_input", _INPUT)]
+        
+        self.KEYBDINPUT = KEYBDINPUT
+        self.INPUT = INPUT
+        
+        # Pre-compile E key
+        VK_E = 0x45
+        self.e_key_down = INPUT(type=1, ki=KEYBDINPUT(wVk=VK_E, dwFlags=0))
+        self.e_key_up = INPUT(type=1, ki=KEYBDINPUT(wVk=VK_E, dwFlags=0x0002))
+        self.e_inputs = (INPUT * 2)(self.e_key_down, self.e_key_up)
+        
+        # Pre-compile number keys
+        self.number_inputs = {}
+        VK_CODES = {1: 0x31, 2: 0x32, 3: 0x33, 4: 0x34, 5: 0x35}
+        for num, vk in VK_CODES.items():
+            key_down = INPUT(type=1, ki=KEYBDINPUT(wVk=vk, dwFlags=0))
+            key_up = INPUT(type=1, ki=KEYBDINPUT(wVk=vk, dwFlags=0x0002))
+            self.number_inputs[num] = (INPUT * 2)(key_down, key_up)
+    
+    def ultra_reliable_e_press(self):
+        """Ultra-reliable E key press với multiple methods"""
+        current_time = time.perf_counter()
+        if current_time - self.last_e_time < self.e_key_cooldown:
+            return False
+        
+        self.last_e_time = current_time
+        success_count = 0
+        
+        # Method 1: SendInput (fastest)
+        try:
+            result = ctypes.windll.user32.SendInput(2, self.e_inputs, ctypes.sizeof(self.INPUT))
+            if result == 2:
+                success_count += 1
+                self.method_stats['e_key']['sendinput'] += 1
+        except:
+            pass
+        
+        time.sleep(0.01)
+        
+        # Method 2: PyAutoGUI
+        try:
+            pyautogui.press('e')
+            success_count += 1
+            self.method_stats['e_key']['pyautogui'] += 1
+        except:
+            pass
+        
+        time.sleep(0.01)
+        
+        # Method 3: Keyboard library
+        try:
+            keyboard.press_and_release('e')
+            success_count += 1
+            self.method_stats['e_key']['keyboard'] += 1
+        except:
+            pass
+        
+        time.sleep(0.01)
+        
+        # Method 4: Win32 keybd_event
+        try:
+            VK_E = 0x45
+            scan_code = win32api.MapVirtualKey(VK_E, 0)
+            win32api.keybd_event(VK_E, scan_code, 0, 0)
+            time.sleep(0.02)
+            win32api.keybd_event(VK_E, scan_code, win32con.KEYEVENTF_KEYUP, 0)
+            success_count += 1
+            self.method_stats['e_key']['win32'] += 1
+        except:
+            pass
+        
+        return success_count > 0
+    
+    def ultra_reliable_number_press(self, number, game_window=None):
+        """Ultra-reliable number press với all available methods"""
+        current_time = time.perf_counter()
+        if current_time - self.last_number_time < self.number_key_cooldown:
+            return False
+        
+        self.last_number_time = current_time
+        success_count = 0
+        number_str = str(number)
+        
+        # Method 1: SendInput
+        try:
+            if number in self.number_inputs:
+                result = ctypes.windll.user32.SendInput(2, self.number_inputs[number], ctypes.sizeof(self.INPUT))
+                if result == 2:
+                    success_count += 1
+                    self.method_stats['number']['sendinput'] += 1
+        except:
+            pass
+        
+        time.sleep(0.015)
+        
+        # Method 2: PyAutoGUI
+        try:
+            pyautogui.press(number_str)
+            success_count += 1
+            self.method_stats['number']['pyautogui'] += 1
+        except:
+            pass
+        
+        time.sleep(0.015)
+        
+        # Method 3: Keyboard library
+        try:
+            keyboard.press_and_release(number_str)
+            success_count += 1
+            self.method_stats['number']['keyboard'] += 1
+        except:
+            pass
+        
+        time.sleep(0.015)
+        
+        # Method 4: Win32 keybd_event
+        try:
+            VK_CODES = {1: 0x31, 2: 0x32, 3: 0x33, 4: 0x34, 5: 0x35}
+            if number in VK_CODES:
+                vk_code = VK_CODES[number]
+                scan_code = win32api.MapVirtualKey(vk_code, 0)
+                
+                for _ in range(2):
+                    win32api.keybd_event(vk_code, scan_code, 0, 0)
+                    time.sleep(0.03)
+                    win32api.keybd_event(vk_code, scan_code, win32con.KEYEVENTF_KEYUP, 0)
+                    time.sleep(0.02)
+                
+                success_count += 1
+                self.method_stats['number']['win32'] += 1
+        except:
+            pass
+        
+        time.sleep(0.015)
+        
+        # Method 5: PostMessage (if game window available)
+        if game_window:
+            try:
+                VK_CODES = {1: 0x31, 2: 0x32, 3: 0x33, 4: 0x34, 5: 0x35}
+                if number in VK_CODES:
+                    vk_code = VK_CODES[number]
+                    scan_code = win32api.MapVirtualKey(vk_code, 0)
+                    lparam = (scan_code << 16) | 1
+                    
+                    for _ in range(2):
+                        win32gui.PostMessage(game_window, win32con.WM_KEYDOWN, vk_code, lparam)
+                        time.sleep(0.02)
+                        win32gui.PostMessage(game_window, win32con.WM_CHAR, ord(number_str), lparam)
+                        time.sleep(0.02)
+                        lparam_up = lparam | (1 << 30) | (1 << 31)
+                        win32gui.PostMessage(game_window, win32con.WM_KEYUP, vk_code, lparam_up)
+                        time.sleep(0.02)
+                    
+                    success_count += 1
+                    self.method_stats['number']['postmsg'] += 1
+            except:
+                pass
+        
+        return success_count > 0
+
+class EnhancedVisionProcessor:
+    """Enhanced vision processor với improved detection"""
+    
+    def __init__(self):
+        # Optimized colors
         self.red_lower = np.array([240, 200, 180], dtype=np.uint8)
         self.red_upper = np.array([255, 220, 200], dtype=np.uint8)
         self.green_lower = np.array([65, 20, 20], dtype=np.uint8)
@@ -19,14 +228,41 @@ class VisionEngine:
         # Morphology kernel
         self.kernel = np.ones((2, 2), np.uint8)
         
-        # Prediction buffers
+        # Enhanced prediction system
         self.position_buffer = deque(maxlen=10)
         self.velocity_buffer = deque(maxlen=6)
         
-        print("🔧 VisionEngine initialized")
+        # Screen setup
+        self.screen_width, self.screen_height = pyautogui.size()
+        self.scan_region = self.calculate_scan_region()
+        
+        # Performance stats
+        self.detection_stats = {
+            'frames_processed': 0,
+            'red_detections': 0,
+            'green_detections': 0,
+            'predictions': 0,
+            'immediate_collisions': 0
+        }
     
-    def detect_red_progress(self, frame):
-        """Detect red progress bar"""
+    def calculate_scan_region(self):
+        """Calculate optimal scan region"""
+        width = int(self.screen_width * 0.24)
+        height = int(self.screen_height * 0.16)
+        left = (self.screen_width - width) // 2
+        top = self.screen_height - height - 50
+        return (left, top, left + width, top + height)
+    
+    def capture_screen_fast(self):
+        """Fast screen capture with error handling"""
+        try:
+            screenshot = ImageGrab.grab(bbox=self.scan_region)
+            return np.array(screenshot, dtype=np.uint8)
+        except Exception:
+            return None
+    
+    def detect_red_progress_enhanced(self, frame):
+        """Enhanced red progress detection"""
         if frame is None:
             return None
         
@@ -35,46 +271,46 @@ class VisionEngine:
             mask = cv2.inRange(frame, self.red_lower, self.red_upper)
             mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, self.kernel)
             
-            # Find contours
+            # Contour detection
             contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             
             if contours:
                 largest = max(contours, key=cv2.contourArea)
                 area = cv2.contourArea(largest)
                 
-                if area > 85:  # Minimum area threshold
+                if area > 85:
                     x, y, w, h = cv2.boundingRect(largest)
+                    self.detection_stats['red_detections'] += 1
                     return {
-                        'x': x + w,  # Right edge position
+                        'x': x + w,  # Right edge
                         'y': y + h // 2,
                         'area': area,
                         'width': w,
                         'height': h
                     }
-        except Exception as e:
-            print(f"Red detection error: {e}")
+        except Exception:
+            pass
         
         return None
     
-    def detect_green_zone(self, frame):
-        """Detect green target zone"""
+    def detect_green_zone_enhanced(self, frame):
+        """Enhanced green zone detection"""
         if frame is None:
             return None
         
         try:
-            # Color masking
             mask = cv2.inRange(frame, self.green_lower, self.green_upper)
             mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, self.kernel)
             
-            # Find contours
             contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             
             if contours:
                 largest = max(contours, key=cv2.contourArea)
                 area = cv2.contourArea(largest)
                 
-                if area > 50:  # Minimum area threshold
+                if area > 50:
                     x, y, w, h = cv2.boundingRect(largest)
+                    self.detection_stats['green_detections'] += 1
                     return {
                         'left': x,
                         'right': x + w,
@@ -84,13 +320,13 @@ class VisionEngine:
                         'width': w,
                         'height': h
                     }
-        except Exception as e:
-            print(f"Green detection error: {e}")
+        except Exception:
+            pass
         
         return None
     
-    def predict_collision(self, red_data, green_data):
-        """Advanced collision prediction algorithm"""
+    def predict_collision_enhanced(self, red_data, green_data):
+        """Enhanced collision prediction với better accuracy"""
         if not red_data or not green_data:
             return False, 0
         
@@ -118,7 +354,7 @@ class VisionEngine:
         if len(velocities) < 2:
             return False, 0
         
-        # Weighted average for smooth velocity
+        # Smooth velocity với weighted average
         weights = [1, 1.5, 2, 2.5]
         if len(velocities) >= 4:
             weighted_velocity = sum(v * w for v, w in zip(velocities[-4:], weights)) / sum(weights)
@@ -132,8 +368,8 @@ class VisionEngine:
             smooth_velocity = sum(self.velocity_buffer) / len(self.velocity_buffer)
             
             if smooth_velocity > 0:
-                # Predict collision
-                target_zone = green_data['left'] - 3  # Early trigger
+                # Predict collision với enhanced parameters
+                target_zone = green_data['left'] - 3
                 distance = target_zone - red_x
                 
                 if distance > 0:
@@ -141,13 +377,15 @@ class VisionEngine:
                     
                     # Optimal prediction window
                     if 0.025 < time_to_collision <= 0.15:
+                        self.detection_stats['predictions'] += 1
+                        # Calculate optimal delay với compensation
                         optimal_delay = max(0, time_to_collision - 0.03)
                         return True, optimal_delay
         
         return False, 0
     
-    def check_immediate_collision(self, red_data, green_data):
-        """Check for immediate collision"""
+    def check_immediate_collision_enhanced(self, red_data, green_data):
+        """Enhanced immediate collision detection"""
         if not red_data or not green_data:
             return False
         
@@ -155,130 +393,149 @@ class VisionEngine:
         green_left = green_data['left']
         green_right = green_data['right']
         
-        # Dynamic tolerance based on size
+        # Enhanced tolerance với size-based adjustment
         base_tolerance = 5
         size_factor = min(red_data.get('width', 20), 30) / 20
         tolerance = int(base_tolerance * size_factor)
         
-        return (green_left - tolerance) <= red_x <= (green_right + tolerance)
+        collision = (green_left - tolerance) <= red_x <= (green_right + tolerance)
+        
+        if collision:
+            self.detection_stats['immediate_collisions'] += 1
+        
+        return collision
 
-class BotConfig:
-    """Configuration settings for the bot"""
+def find_game_window():
+    """Find FiveM game window"""
+    def enum_callback(hwnd, windows):
+        if win32gui.IsWindowVisible(hwnd):
+            window_text = win32gui.GetWindowText(hwnd)
+            if any(keyword in window_text.lower() for keyword in ['fivem', 'cfx.re', 'grand theft auto']):
+                windows.append((hwnd, window_text))
+        return True
     
-    def __init__(self):
-        # Performance settings
-        self.target_fps = 32
-        self.frame_interval = 1.0 / self.target_fps
-        
-        # Timing settings
-        self.rod_timeout = 4.8
-        self.e_key_cooldown = 0.06
-        self.number_key_cooldown = 0.12
-        
-        print("⚙️ BotConfig initialized")
+    windows = []
+    win32gui.EnumWindows(enum_callback, windows)
     
-    def get_scan_region(self, screen_width, screen_height):
-        """Calculate optimal scan region"""
-        width = int(screen_width * 0.24)
-        height = int(screen_height * 0.16)
-        left = (screen_width - width) // 2
-        top = screen_height - height - 50
-        return (left, top, left + width, top + height)
+    if windows:
+        hwnd, title = windows[0]
+        return hwnd
     
-    def get_timing_config(self):
-        """Get timing configuration"""
-        return {
-            'target_fps': self.target_fps,
-            'frame_interval': self.frame_interval,
-            'rod_timeout': self.rod_timeout,
-            'e_key_cooldown': self.e_key_cooldown,
-            'number_key_cooldown': self.number_key_cooldown
-        }
+    return None
 
-class InputOptimizer:
-    """Input method optimization"""
+def main_detection_loop():
+    """Main detection loop với zero-lag focus"""
+    # Initialize components
+    input_manager = UltraReliableInputManager()
+    vision_processor = EnhancedVisionProcessor()
+    game_window = find_game_window()
     
-    def __init__(self):
-        # Method priorities (1 = highest priority)
-        self.method_priorities = {
-            'sendinput': 1,
-            'pyautogui': 2,
-            'keyboard': 3,
-            'win32': 4,
-            'postmsg': 5
-        }
-        
-        # Success rate tracking
-        self.success_rates = {
-            'sendinput': 0.95,
-            'pyautogui': 0.90,
-            'keyboard': 0.85,
-            'win32': 0.80,
-            'postmsg': 0.75
-        }
-        
-        print("🎯 InputOptimizer initialized")
+    # Settings
+    target_fps = 32
+    frame_interval = 1.0 / target_fps
+    last_minigame_time = time.time()
+    rod_timeout = 4.8
     
-    def get_optimal_sequence(self, key_type='e_key'):
-        """Get optimal input method sequence"""
-        if key_type == 'e_key':
-            return ['sendinput', 'pyautogui', 'keyboard', 'win32']
-        elif key_type == 'number':
-            return ['sendinput', 'pyautogui', 'keyboard', 'win32', 'postmsg']
-        else:
-            return ['sendinput', 'pyautogui']
-    
-    def calculate_timing_offset(self, prediction_time):
-        """Calculate optimal timing offset"""
-        base_offset = 0.03
-        
-        if prediction_time < 0.05:
-            return base_offset * 0.8
-        elif prediction_time > 0.1:
-            return base_offset * 1.2
-        else:
-            return base_offset
-    
-    def get_method_config(self, method_name):
-        """Get configuration for specific input method"""
-        configs = {
-            'sendinput': {'delay': 0.02, 'retry_count': 1},
-            'pyautogui': {'delay': 0.01, 'retry_count': 1},
-            'keyboard': {'delay': 0.015, 'retry_count': 1},
-            'win32': {'delay': 0.02, 'retry_count': 2},
-            'postmsg': {'delay': 0.02, 'retry_count': 2}
-        }
-        
-        return configs.get(method_name, {'delay': 0.02, 'retry_count': 1})
-
-# Version info and integrity check
-CORE_VERSION = "6.5.1"
-CORE_CHECKSUM = "a1b2c3d4e5f6"  # Simple integrity marker
-
-def get_core_info():
-    """Get core engine information"""
-    return {
-        'version': CORE_VERSION,
-        'checksum': CORE_CHECKSUM,
-        'components': ['VisionEngine', 'BotConfig', 'InputOptimizer'],
-        'loaded_at': time.time()
+    # Statistics
+    stats = {
+        'frames_processed': 0,
+        'fish_caught': 0,
+        'e_attempts': 0,
+        'rod_deploys': 0,
+        'predictions_used': 0,
+        'immediate_hits': 0,
+        'start_time': time.time()
     }
+    
+    collision_confirmed = False
+    consecutive_misses = 0
+    
+    self.log(f"🚀 Zero-Lag Detection Started (Target: {target_fps} FPS)")
+    
+    while self.is_running:
+        loop_start = time.perf_counter()
+        
+        try:
+            # Capture frame
+            frame = vision_processor.capture_screen_fast()
+            if frame is None:
+                time.sleep(0.001)
+                continue
+            
+            stats['frames_processed'] += 1
+            
+            # Detect elements
+            red_data = vision_processor.detect_red_progress_enhanced(frame)
+            green_data = vision_processor.detect_green_zone_enhanced(frame)
+            
+            minigame_active = bool(red_data and green_data)
+            
+            if minigame_active:
+                last_minigame_time = time.time()
+                consecutive_misses = 0
+                
+                # Try predictive collision first
+                should_predict, delay = vision_processor.predict_collision_enhanced(red_data, green_data)
+                
+                if should_predict and not collision_confirmed:
+                    stats['predictions_used'] += 1
+                    
+                    # Apply optimal delay
+                    if delay > 0:
+                        time.sleep(min(delay, 0.05))
+                    
+                    # Execute ultra-reliable E-key press
+                    if input_manager.ultra_reliable_e_press():
+                        stats['e_attempts'] += 1
+                        stats['fish_caught'] += 1
+                        self.log("⚡ *** FISH CAUGHT - PREDICTIVE AI ***")
+                        collision_confirmed = True
+                        
+                        # Clear buffers
+                        vision_processor.position_buffer.clear()
+                        vision_processor.velocity_buffer.clear()
+                        
+                        time.sleep(0.35)
+                        continue
+                
+                # Fallback to immediate collision
+                elif vision_processor.check_immediate_collision_enhanced(red_data, green_data) and not collision_confirmed:
+                    if input_manager.ultra_reliable_e_press():
+                        stats['e_attempts'] += 1
+                        stats['fish_caught'] += 1
+                        stats['immediate_hits'] += 1
+                        self.log("⚡ *** FISH CAUGHT - IMMEDIATE DETECTION ***")
+                        collision_confirmed = True
+                        time.sleep(0.3)
+            else:
+                # Reset collision state
+                collision_confirmed = False
+                consecutive_misses += 1
+                
+                # Clear buffers if no minigame for a while
+                if consecutive_misses > 30:
+                    vision_processor.position_buffer.clear()
+                    vision_processor.velocity_buffer.clear()
+                    consecutive_misses = 0
+                
+                # Check rod deployment
+                time_since_minigame = time.time() - last_minigame_time
+                if time_since_minigame >= rod_timeout and auto_rod_enabled:
+                    if input_manager.ultra_reliable_number_press(selected_rod_key, game_window):
+                        stats['rod_deploys'] += 1
+                        self.log(f"🎣 *** ROD DEPLOYED (Key {selected_rod_key}) - ULTRA-RELIABLE ***")
+                        last_minigame_time = time.time()
+            
+            # Frame rate control
+            elapsed = time.perf_counter() - loop_start
+            sleep_time = max(0, frame_interval - elapsed)
+            
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+            
+        except Exception as e:
+            self.log(f"Detection loop error: {e}")
+            time.sleep(0.01)
 
-# Test function
-if __name__ == "__main__":
-    print("🧪 Testing core engine components...")
-    
-    # Test VisionEngine
-    vision = VisionEngine()
-    print("✅ VisionEngine created")
-    
-    # Test BotConfig
-    config = BotConfig()
-    print("✅ BotConfig created")
-    
-    # Test InputOptimizer
-    optimizer = InputOptimizer()
-    print("✅ InputOptimizer created")
-    
-    print("🎉 All core components working!")
-    print(f"📋 Core info: {get_core_info()}")
+# Execute main loop
+main_detection_loop()
