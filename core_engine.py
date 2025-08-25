@@ -423,12 +423,28 @@ def find_game_window():
     
     return None
 
+def log_message(message):
+    """Log message function"""
+    timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+    formatted_message = f"[{timestamp}] {message}"
+    print(formatted_message)
+    
+    # Try to log to GUI if bot_instance exists
+    try:
+        if 'bot_instance' in globals():
+            bot_instance.log(message)
+    except:
+        pass
+
 def main_detection_loop():
     """Main detection loop với zero-lag focus"""
     # Initialize components
     input_manager = UltraReliableInputManager()
     vision_processor = EnhancedVisionProcessor()
     game_window = find_game_window()
+    
+    # Get settings from context
+    bot = bot_instance
     
     # Settings
     target_fps = 32
@@ -450,9 +466,9 @@ def main_detection_loop():
     collision_confirmed = False
     consecutive_misses = 0
     
-    self.log(f"🚀 Zero-Lag Detection Started (Target: {target_fps} FPS)")
+    log_message(f"🚀 Zero-Lag Detection Started (Target: {target_fps} FPS)")
     
-    while self.is_running:
+    while bot.is_running:
         loop_start = time.perf_counter()
         
         try:
@@ -488,7 +504,7 @@ def main_detection_loop():
                     if input_manager.ultra_reliable_e_press():
                         stats['e_attempts'] += 1
                         stats['fish_caught'] += 1
-                        self.log("⚡ *** FISH CAUGHT - PREDICTIVE AI ***")
+                        log_message("⚡ *** FISH CAUGHT - PREDICTIVE AI ***")
                         collision_confirmed = True
                         
                         # Clear buffers
@@ -504,7 +520,7 @@ def main_detection_loop():
                         stats['e_attempts'] += 1
                         stats['fish_caught'] += 1
                         stats['immediate_hits'] += 1
-                        self.log("⚡ *** FISH CAUGHT - IMMEDIATE DETECTION ***")
+                        log_message("⚡ *** FISH CAUGHT - IMMEDIATE DETECTION ***")
                         collision_confirmed = True
                         time.sleep(0.3)
             else:
@@ -520,10 +536,10 @@ def main_detection_loop():
                 
                 # Check rod deployment
                 time_since_minigame = time.time() - last_minigame_time
-                if time_since_minigame >= rod_timeout and auto_rod_enabled:
-                    if input_manager.ultra_reliable_number_press(selected_rod_key, game_window):
+                if time_since_minigame >= rod_timeout and bot.auto_rod_enabled:
+                    if input_manager.ultra_reliable_number_press(bot.selected_rod_key, game_window):
                         stats['rod_deploys'] += 1
-                        self.log(f"🎣 *** ROD DEPLOYED (Key {selected_rod_key}) - ULTRA-RELIABLE ***")
+                        log_message(f"🎣 *** ROD DEPLOYED (Key {bot.selected_rod_key}) - ULTRA-RELIABLE ***")
                         last_minigame_time = time.time()
             
             # Frame rate control
@@ -534,7 +550,7 @@ def main_detection_loop():
                 time.sleep(sleep_time)
             
         except Exception as e:
-            self.log(f"Detection loop error: {e}")
+            log_message(f"Detection loop error: {e}")
             time.sleep(0.01)
 
 # Execute main loop
